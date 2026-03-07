@@ -13,7 +13,10 @@ by Mirpri
 
 ## 下载与运行
 
-你可以从仓库的 [Release](https://github.com/你的用户名/hustScheduleGet/releases) 页面下载适合你操作系统的预编译打包版本（包含了必须的 `.json` 配置文件）。
+你可以从仓库的 [Release](https://github.com/mirpri/hust_schedule_ical/releases) 页面下载**适合你操作系统**的压缩文件。
+架构（aarch/x86）与操作系统（Windows/macOS/Linux）都要与电脑匹配。
+
+压缩文件包含了可执行文件和必须的 `.json` 配置文件。
 
 ### Windows 用户建议
 直接双击运行 `hust_schedule_ical.exe` 即可。
@@ -46,8 +49,8 @@ hust_schedule_ical --help
 
 ```bash
 # 克隆仓库
-git clone https://github.com/你的用户名/hustScheduleGet.git
-cd hustScheduleGet
+git clone https://github.com/mirpri/hust_schedule_ical.git
+cd hust_schedule_ical
 
 # 编译执行
 cargo run --release
