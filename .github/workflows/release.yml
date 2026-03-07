@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, use_cross: false, exe: hust_schedule_ical.exe }
+          - { os: windows-latest, target: aarch64-pc-windows-msvc, use_cross: false, exe: hust_schedule_ical.exe }
+          - { os: macos-latest  , target: aarch64-apple-darwin, use_cross: false, exe: hust_schedule_ical }
+          - { os: ubuntu-latest , target: x86_64-unknown-linux-gnu, use_cross: false, exe: hust_schedule_ical }
+          - { os: ubuntu-latest , target: aarch64-unknown-linux-gnu, use_cross: true,  exe: hust_schedule_ical }
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup target add ${{ matrix.job.target }}
+
+      - name: Install cross
+        if: matrix.job.use_cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.job.use_cross }}" == "true" ]; then
+            cross build --release --target ${{ matrix.job.target }}
+          else
+            cargo build --release --target ${{ matrix.job.target }}
+          fi
+
+      - name: Package artifacts (Unix)
+        if: matrix.job.os != 'windows-latest'
+        run: |
+          mkdir -p package
+          cp target/${{ matrix.job.target }}/release/hust_schedule_ical package/
+          cp settings.json package/
+          cp class-times-summer.json package/ || true
+          cp class-times-fall.json package/ || true
+          cd package
+          zip -r ../${{ matrix.job.target }}.zip *
+
+      - name: Package artifacts (Windows)
+        if: matrix.job.os == 'windows-latest'
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item target\${{ matrix.job.target }}\release\hust_schedule_ical.exe -Destination package\
+          Copy-Item settings.json -Destination package\
+          if (Test-Path class-times-summer.json) { Copy-Item class-times-summer.json -Destination package\ }
+          if (Test-Path class-times-fall.json) { Copy-Item class-times-fall.json -Destination package\ }
+          Compress-Archive -Path package\* -DestinationPath ${{ matrix.job.target }}.zip
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.job.target }}.zip
