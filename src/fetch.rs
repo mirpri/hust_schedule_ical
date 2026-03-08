@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
@@ -9,12 +9,13 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::NaiveTime;
+use colored::Colorize;
 use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::{Value, json};
 use tungstenite::{Message, connect};
 
-use crate::types::{Browser, ClassTimeFile, DevtoolsTarget, LoadedClassTimes, ResolvedOptions};
+use crate::types::{Browser, ClassTimeFile, DevtoolsTarget, LoadedClassTimes, LoadedSeasonSchedule, PeriodsConfig, ResolvedOptions};
 
 pub fn load_class_times(path: &Path) -> Result<LoadedClassTimes> {
     let raw = fs::read_to_string(path)
@@ -22,23 +23,62 @@ pub fn load_class_times(path: &Path) -> Result<LoadedClassTimes> {
     let parsed: ClassTimeFile =
         serde_json::from_str(&raw).context("解析课程时间 JSON 失败")?;
 
-    let mut map = std::collections::HashMap::new();
-    for period in parsed.periods {
+    let mut schedules = Vec::new();
+    let mut default_periods = None;
+
+    let parse_time = |period: &crate::types::ClassPeriod| -> Result<(u32, (NaiveTime, NaiveTime))> {
         let start = NaiveTime::parse_from_str(&period.start, "%H:%M")
             .with_context(|| format!("第 {} 节开始时间格式不正确", period.index))?;
         let end = NaiveTime::parse_from_str(&period.end, "%H:%M")
             .with_context(|| format!("第 {} 节结束时间格式不正确", period.index))?;
-        map.insert(period.index, (start, end));
+        Ok((period.index, (start, end)))
+    };
+
+    match parsed.periods {
+        PeriodsConfig::Seasons(seasons) => {
+            for season in seasons {
+                let mut map = std::collections::HashMap::new();
+                for period in season.periods {
+                    let (index, times) = parse_time(&period)?;
+                    map.insert(index, times);
+                }
+
+                let parse_date = |date_str: &str| -> Result<u32> {
+                    let parts: Vec<&str> = date_str.split('-').collect();
+                    if parts.len() != 2 {
+                        bail!("日期格式不正确：{}，预期格式为 MM-DD", date_str);
+                    }
+                    let m: u32 = parts[0].parse().context("月份应为数字")?;
+                    let d: u32 = parts[1].parse().context("日期应为数字")?;
+                    Ok(m * 100 + d)
+                };
+
+                schedules.push(LoadedSeasonSchedule {
+                    start_mmdd: parse_date(&season.start_date)?,
+                    end_mmdd: parse_date(&season.end_date)?,
+                    periods: map,
+                });
+            }
+        }
+        PeriodsConfig::Flat(periods) => {
+            let mut map = std::collections::HashMap::new();
+            for period in periods {
+                let (index, times) = parse_time(&period)?;
+                map.insert(index, times);
+            }
+            default_periods = Some(map);
+        }
     }
 
     Ok(LoadedClassTimes {
         timezone: parsed.timezone.unwrap_or_else(|| "Asia/Shanghai".to_string()),
-        periods: map,
+        schedules,
+        default_periods,
     })
 }
 
-pub fn fetch_schedule(options: &ResolvedOptions) -> Result<String> {
-    let cookie_header = login_and_get_cookie_header(options)?;
+pub fn fetch_schedule(options: &ResolvedOptions, settings: &mut crate::types::Settings) -> Result<String> {
+    let cookie_header = login_and_get_cookie_header(options, settings)?;
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -81,18 +121,18 @@ pub fn fetch_schedule(options: &ResolvedOptions) -> Result<String> {
     Ok(body)
 }
 
-fn login_and_get_cookie_header(options: &ResolvedOptions) -> Result<String> {
+fn login_and_get_cookie_header(options: &ResolvedOptions, settings: &mut crate::types::Settings) -> Result<String> {
     let port = pick_debug_port()?;
     let profile_dir = temp_browser_profile_dir(options.browser)?;
     fs::create_dir_all(&profile_dir)
         .with_context(|| format!("创建临时浏览器配置目录失败：{}", profile_dir.display()))?;
 
     let login_url = format!("{}?XQH={}", options.url, options.xqh);
-    let mut child = launch_debug_browser(options.browser, port, &profile_dir, &login_url)?;
+    let mut child = launch_debug_browser(options, port, &profile_dir, &login_url, settings)?;
 
     let result = (|| -> Result<String> {
         wait_for_devtools(port)?;
-        println!("已打开浏览器窗口，请在其中登录hub系统，登录成功后回到这里按Enter继续。");
+        println!("{}", "已打开浏览器窗口，请在其中登录hub系统，登录成功后回到这里按Enter继续。".yellow());
         let mut line = String::new();
         io::stdin()
             .read_line(&mut line)
@@ -130,8 +170,8 @@ fn temp_browser_profile_dir(browser: Browser) -> Result<PathBuf> {
     )))
 }
 
-fn launch_debug_browser(browser: Browser, port: u16, profile_dir: &Path, url: &str) -> Result<Child> {
-    let exe = find_browser_executable(browser)?;
+fn launch_debug_browser(options: &ResolvedOptions, port: u16, profile_dir: &Path, url: &str, settings: &mut crate::types::Settings) -> Result<Child> {
+    let exe = find_browser_executable(options, settings)?;
     Command::new(&exe)
         .arg(format!("--remote-debugging-port={port}"))
         .arg(format!("--user-data-dir={}", profile_dir.display()))
@@ -146,31 +186,93 @@ fn launch_debug_browser(browser: Browser, port: u16, profile_dir: &Path, url: &s
         .with_context(|| format!("启动浏览器失败：{}", exe.display()))
 }
 
-fn find_browser_executable(browser: Browser) -> Result<PathBuf> {
-    let local_appdata = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
-    let program_files = std::env::var_os("ProgramFiles").map(PathBuf::from);
-    let program_files_x86 = std::env::var_os("ProgramFiles(x86)").map(PathBuf::from);
-
-    let candidates: Vec<PathBuf> = match browser {
-        Browser::Chrome => vec![
-            local_appdata.clone().map(|p| p.join("Google\\Chrome\\Application\\chrome.exe")),
-            program_files.clone().map(|p| p.join("Google\\Chrome\\Application\\chrome.exe")),
-            program_files_x86.clone().map(|p| p.join("Google\\Chrome\\Application\\chrome.exe")),
-        ],
-        Browser::Edge => vec![
-            local_appdata.clone().map(|p| p.join("Microsoft\\Edge\\Application\\msedge.exe")),
-            program_files.clone().map(|p| p.join("Microsoft\\Edge\\Application\\msedge.exe")),
-            program_files_x86.clone().map(|p| p.join("Microsoft\\Edge\\Application\\msedge.exe")),
-        ],
+fn find_browser_executable(options: &ResolvedOptions, settings: &mut crate::types::Settings) -> Result<PathBuf> {
+    let mut candidates = Vec::new();
+    
+    match options.browser {
+        Browser::Chrome => {
+            if let Some(p) = &options.default_chrome_path { candidates.push(p.clone()); }
+        },
+        Browser::Edge => {
+            if let Some(p) = &options.default_edge_path { candidates.push(p.clone()); }
+        },
     }
-    .into_iter()
-    .flatten()
-    .collect();
 
-    candidates
-        .into_iter()
-        .find(|path| path.exists())
-        .ok_or_else(|| anyhow!("未找到浏览器可执行文件"))
+    #[cfg(target_os = "windows")]
+    {
+        let local_appdata = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+        let program_files = std::env::var_os("ProgramFiles").map(PathBuf::from);
+        let program_files_x86 = std::env::var_os("ProgramFiles(x86)").map(PathBuf::from);
+
+        match options.browser {
+            Browser::Chrome => {
+                if let Some(p) = local_appdata.clone() { candidates.push(p.join("Google\\Chrome\\Application\\chrome.exe")); }
+                if let Some(p) = program_files.clone() { candidates.push(p.join("Google\\Chrome\\Application\\chrome.exe")); }
+                if let Some(p) = program_files_x86.clone() { candidates.push(p.join("Google\\Chrome\\Application\\chrome.exe")); }
+            },
+            Browser::Edge => {
+                if let Some(p) = local_appdata.clone() { candidates.push(p.join("Microsoft\\Edge\\Application\\msedge.exe")); }
+                if let Some(p) = program_files.clone() { candidates.push(p.join("Microsoft\\Edge\\Application\\msedge.exe")); }
+                if let Some(p) = program_files_x86.clone() { candidates.push(p.join("Microsoft\\Edge\\Application\\msedge.exe")); }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        match options.browser {
+            Browser::Chrome => candidates.push(PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")),
+            Browser::Edge => candidates.push(PathBuf::from("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        match options.browser {
+            Browser::Chrome => candidates.extend(vec![
+                PathBuf::from("/usr/bin/google-chrome"),
+                PathBuf::from("/usr/bin/google-chrome-stable"),
+                PathBuf::from("/usr/bin/chromium"),
+                PathBuf::from("/usr/bin/chromium-browser"),
+            ]),
+            Browser::Edge => candidates.extend(vec![
+                PathBuf::from("/usr/bin/microsoft-edge"),
+                PathBuf::from("/usr/bin/microsoft-edge-stable"),
+            ]),
+        }
+    }
+
+    if let Some(path) = candidates.into_iter().find(|path| path.exists()) {
+        return Ok(path);
+    }
+
+    println!("{}", format!("未能自动找到 {} 的可执行文件位置。", options.browser.as_str()).red().bold());
+    loop {
+        println!("请输入浏览器可执行文件的完整路径，或将浏览器可执行文件拖放到此窗口：");
+        io::stdout().flush().unwrap_or(());
+        
+        let mut line = String::new();
+        io::stdin()
+            .read_line(&mut line)
+            .context("读取终端输入失败")?;
+        
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            bail!("由于未提供浏览器路径，操作已取消");
+        }
+        
+        // 移除用户输入中可能包含的首尾引号和 & 符号（Windows 路径拖放时常见）
+        let path = PathBuf::from(trimmed.trim_matches('"').trim_matches('\'').trim_matches('&').trim());
+        if path.exists() && path.is_file() {
+            match options.browser {
+                Browser::Chrome => settings.chrome_path = Some(path.display().to_string()),
+                Browser::Edge => settings.edge_path = Some(path.display().to_string()),
+            }
+            return Ok(path);
+        } else {
+            println!("{}\n", format!("路径无效或文件不存在：{}", path.display()).red().bold());
+        }
+    }
 }
 
 fn wait_for_devtools(port: u16) -> Result<()> {

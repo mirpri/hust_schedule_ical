@@ -70,19 +70,73 @@ pub struct Course {
     pub extra: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct SeasonSchedule {
+    pub start_date: String,
+    pub end_date: String,
+    #[serde(alias = "classes", alias = "periods")]
+    pub periods: Vec<ClassPeriod>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PeriodsConfig {
+    Seasons(Vec<SeasonSchedule>),
+    Flat(Vec<ClassPeriod>),
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ClassTimeFile {
     pub timezone: Option<String>,
-    pub periods: Vec<ClassPeriod>,
+    pub periods: PeriodsConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadedSeasonSchedule {
+    pub start_mmdd: u32,
+    pub end_mmdd: u32,
+    pub periods: HashMap<u32, (NaiveTime, NaiveTime)>,
 }
 
 #[derive(Debug)]
 pub struct LoadedClassTimes {
     pub timezone: String,
-    pub periods: HashMap<u32, (NaiveTime, NaiveTime)>,
+    pub schedules: Vec<LoadedSeasonSchedule>,
+    pub default_periods: Option<HashMap<u32, (NaiveTime, NaiveTime)>>,
 }
 
-#[derive(Debug, Deserialize)]
+impl LoadedClassTimes {
+    pub fn get_class_time(&self, date: chrono::NaiveDate, period_index: u32) -> Option<(NaiveTime, NaiveTime)> {
+        use chrono::Datelike;
+        let current_mmdd = date.month() * 100 + date.day();
+
+        for season in &self.schedules {
+            let s = season.start_mmdd;
+            let e = season.end_mmdd;
+            let in_season = if s <= e {
+                current_mmdd >= s && current_mmdd <= e
+            } else {
+                current_mmdd >= s || current_mmdd <= e
+            };
+
+            if in_season {
+                if let Some(time) = season.periods.get(&period_index) {
+                    return Some(*time);
+                }
+            }
+        }
+        
+        if let Some(dp) = &self.default_periods {
+            if let Some(time) = dp.get(&period_index) {
+                return Some(*time);
+            }
+        }
+        
+        None
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct ClassPeriod {
     pub index: u32,
     pub start: String,
@@ -116,7 +170,10 @@ pub struct Settings {
     pub class_times: Option<String>,
     pub url: Option<String>,
     pub browser: Option<Browser>,
-    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chrome_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edge_path: Option<String>,
 }
 
 #[derive(Debug)]
@@ -128,4 +185,6 @@ pub struct ResolvedOptions {
     pub url: String,
     pub browser: Browser,
     pub cookie_domain: String,
+    pub default_chrome_path: Option<PathBuf>,
+    pub default_edge_path: Option<PathBuf>,
 }

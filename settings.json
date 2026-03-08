@@ -1,8 +1,7 @@
 {
   "xqh": "20252",
   "output": "schedule.ics",
-  "class_times": "class-times-fall.json",
+  "class_times": "class-times.json",
   "url": "https://hubs.hust.edu.cn/schedule/getStudentScheduleByXqh",
-  "browser": "chrome",
-  "updated_at": "2026-03-07T21:21:58.283422700+08:00"
+  "browser": "chrome"
 }

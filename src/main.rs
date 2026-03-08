@@ -42,12 +42,16 @@ fn run() -> Result<()> {
     let raw_schedule = match &options.input_json {
         Some(path) => fs::read_to_string(path)
             .with_context(|| format!("读取课表 JSON 失败：{}", path.display()))?,
-        None => fetch_schedule(&options)?,
+        None => {
+            let sc = fetch_schedule(&options, &mut settings)?;
+            save_settings(&settings)?; // update new browser paths
+            sc
+        }
     };
 
     let weeks: Vec<WeekSchedule> =
         serde_json::from_str(&raw_schedule).context("解析课表 JSON 失败")?;
-    let events = build_events(&weeks, &class_times.periods)?;
+    let events = build_events(&weeks, &class_times)?;
     let ics = render_ics(&events, &class_times.timezone);
 
     fs::write(&options.output, ics)

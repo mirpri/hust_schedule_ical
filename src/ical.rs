@@ -1,13 +1,11 @@
-use std::collections::HashMap;
-
 use anyhow::{Context, Result, anyhow};
-use chrono::{Duration, NaiveDateTime, NaiveTime};
+use chrono::{Duration, NaiveDateTime};
 
-use crate::types::{CalendarEvent, Course, WeekSchedule};
+use crate::types::{CalendarEvent, Course, WeekSchedule, LoadedClassTimes};
 
 pub fn build_events(
     weeks: &[WeekSchedule],
-    class_times: &HashMap<u32, (NaiveTime, NaiveTime)>,
+    class_times: &LoadedClassTimes,
 ) -> Result<Vec<CalendarEvent>> {
     let mut events = Vec::new();
 
@@ -34,23 +32,25 @@ pub fn build_events(
                     .parse()
                     .with_context(|| format!("课程 {} 的 JSJC 不是有效数字", course.course_name))?;
 
-                let (start_time, _) = class_times.get(&start_period).ok_or_else(|| {
+                let (start_time, _) = class_times.get_class_time(date, start_period).ok_or_else(|| {
                     anyhow!(
-                        "课程 {} 缺少第 {} 节的时间配置",
+                        "课程 {} 缺少 {} 日期的第 {} 节的时间配置",
                         course.course_name,
+                        date,
                         start_period
                     )
                 })?;
-                let (_, end_time) = class_times.get(&end_period).ok_or_else(|| {
+                let (_, end_time) = class_times.get_class_time(date, end_period).ok_or_else(|| {
                     anyhow!(
-                        "课程 {} 缺少第 {} 节的时间配置",
+                        "课程 {} 缺少 {} 日期的第 {} 节的时间配置",
                         course.course_name,
+                        date,
                         end_period
                     )
                 })?;
 
-                let start = NaiveDateTime::new(date, *start_time);
-                let end = NaiveDateTime::new(date, *end_time);
+                let start = NaiveDateTime::new(date, start_time);
+                let end = NaiveDateTime::new(date, end_time);
                 let description = build_description(course);
                 let uid = format!(
                     "{}-{}-{}-{}@hust-schedule-ical",

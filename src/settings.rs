@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use chrono::Local;
 use colored::*;
 
 use crate::{
@@ -69,7 +68,6 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
     settings.class_times = Some(class_times.display().to_string());
     settings.url = Some(url.clone());
     settings.browser = Some(browser);
-    settings.updated_at = Some(Local::now().to_rfc3339());
 
     Ok(ResolvedOptions {
         xqh,
@@ -79,6 +77,8 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
         url,
         browser,
         cookie_domain: DEFAULT_COOKIE_DOMAIN.to_string(),
+        default_chrome_path: settings.chrome_path.as_ref().map(PathBuf::from),
+        default_edge_path: settings.edge_path.as_ref().map(PathBuf::from),
     })
 }
 
@@ -105,7 +105,7 @@ fn prompt_text(label: &str, default: Option<&str>) -> Result<String> {
 fn prompt_browser(default: Option<Browser>) -> Result<Browser> {
     loop {
         match default {
-            Some(browser) => println!("浏览器 [chrome/edge] [{}]:", browser.as_str()),
+            Some(browser) => println!("浏览器 [chrome/edge] [{}]:", browser.as_str().purple().bold()),
             None => println!("浏览器 [chrome/edge]:"),
         }
 

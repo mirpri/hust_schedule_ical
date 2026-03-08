@@ -48,8 +48,7 @@ jobs:
           mkdir -p package
           cp target/${{ matrix.job.target }}/release/hust_schedule_ical package/
           cp settings.json package/
-          cp class-times-summer.json package/ || true
-          cp class-times-fall.json package/ || true
+          cp class-times.json package/ || true
           cd package
           zip -r ../${{ matrix.job.target }}.zip *
 
@@ -59,8 +58,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path package
           Copy-Item target\${{ matrix.job.target }}\release\hust_schedule_ical.exe -Destination package\
           Copy-Item settings.json -Destination package\
-          if (Test-Path class-times-summer.json) { Copy-Item class-times-summer.json -Destination package\ }
-          if (Test-Path class-times-fall.json) { Copy-Item class-times-fall.json -Destination package\ }
+          if (Test-Path class-times.json) { Copy-Item class-times.json -Destination package\ }
           Compress-Archive -Path package\* -DestinationPath ${{ matrix.job.target }}.zip
 
       - name: Release
