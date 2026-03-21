@@ -119,7 +119,7 @@ pub fn render_ics(events: &[CalendarEvent], timezone: &str) -> String {
 fn build_description(course: &Course) -> String {
     return format!(
         "课堂：{}\n节次：{}-{} 节\n课程编号：{}\n课堂编号：{}",
-        course.course_name,
+        course.extra.get("KTMC").and_then(|v| v.as_str()).unwrap_or("未知"),
         course.start_period,
         course.end_period,
         course.extra.get("KCBH").and_then(|v| v.as_str()).unwrap_or("未知"),
