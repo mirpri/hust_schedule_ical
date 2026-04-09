@@ -73,7 +73,7 @@ pub fn build_events(
     Ok(events)
 }
 
-pub fn render_ics(events: &[CalendarEvent], timezone: &str) -> String {
+pub fn render_ics(events: &[CalendarEvent], timezone: &str, reminder_minutes: i32) -> String {
     let mut out = String::new();
     out.push_str("BEGIN:VCALENDAR\r\n");
     out.push_str("VERSION:2.0\r\n");
@@ -109,6 +109,15 @@ pub fn render_ics(events: &[CalendarEvent], timezone: &str) -> String {
             "DESCRIPTION:{}\r\n",
             escape_ics_text(&event.description)
         ));
+        
+        if reminder_minutes >= 0 {
+            out.push_str("BEGIN:VALARM\r\n");
+            out.push_str("ACTION:DISPLAY\r\n");
+            out.push_str(&format!("DESCRIPTION:{}\r\n", escape_ics_text(&event.summary)));
+            out.push_str(&format!("TRIGGER:-PT{}M\r\n", reminder_minutes));
+            out.push_str("END:VALARM\r\n");
+        }
+        
         out.push_str("END:VEVENT\r\n");
     }
 

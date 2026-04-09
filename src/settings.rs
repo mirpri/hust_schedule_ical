@@ -62,12 +62,21 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
         Some(value) => value,
         None => prompt_browser(settings.browser)?,
     };
+    let reminder_minutes = match cli.reminder_minutes {
+        Some(value) => value,
+        None => {
+            let default_str = settings.reminder_minutes.unwrap_or(15).to_string();
+            let parsed = prompt_text("提前提醒时间(分钟，-1为不提醒，0为当时提醒)", Some(&default_str))?;
+            parsed.parse().context("提醒时间必须是有效的数字")?
+        }
+    };
 
     settings.xqh = Some(xqh.clone());
     settings.output = Some(output.display().to_string());
     settings.class_times = Some(class_times.display().to_string());
     settings.url = Some(url.clone());
     settings.browser = Some(browser);
+    settings.reminder_minutes = Some(reminder_minutes);
 
     Ok(ResolvedOptions {
         xqh,
@@ -77,6 +86,7 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
         url,
         browser,
         cookie_domain: DEFAULT_COOKIE_DOMAIN.to_string(),
+        reminder_minutes,
         default_chrome_path: settings.chrome_path.as_ref().map(PathBuf::from),
         default_edge_path: settings.edge_path.as_ref().map(PathBuf::from),
     })

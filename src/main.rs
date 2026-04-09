@@ -52,7 +52,7 @@ fn run() -> Result<()> {
     let weeks: Vec<WeekSchedule> =
         serde_json::from_str(&raw_schedule).context("解析课表 JSON 失败")?;
     let events = build_events(&weeks, &class_times)?;
-    let ics = render_ics(&events, &class_times.timezone);
+    let ics = render_ics(&events, &class_times.timezone, options.reminder_minutes);
 
     fs::write(&options.output, ics)
         .with_context(|| format!("写入输出文件失败：{}", options.output.display()))?;

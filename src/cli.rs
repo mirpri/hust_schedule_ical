@@ -24,4 +24,7 @@ pub struct Cli {
 
     #[arg(long, value_enum)]
     pub browser: Option<Browser>,
+
+    #[arg(long, short = 'm', allow_hyphen_values = true)]
+    pub reminder_minutes: Option<i32>,
 }

@@ -170,6 +170,7 @@ pub struct Settings {
     pub class_times: Option<String>,
     pub url: Option<String>,
     pub browser: Option<Browser>,
+    pub reminder_minutes: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chrome_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,6 +186,7 @@ pub struct ResolvedOptions {
     pub url: String,
     pub browser: Browser,
     pub cookie_domain: String,
+    pub reminder_minutes: i32,
     pub default_chrome_path: Option<PathBuf>,
     pub default_edge_path: Option<PathBuf>,
 }

@@ -3,5 +3,6 @@
   "output": "schedule.ics",
   "class_times": "class-times.json",
   "url": "https://hubs.hust.edu.cn/schedule/getStudentScheduleByXqh",
-  "browser": "chrome"
+  "browser": "chrome",
+  "reminder_minutes": 15
 }
