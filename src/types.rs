@@ -169,6 +169,7 @@ pub struct Settings {
     pub output: Option<String>,
     pub class_times: Option<String>,
     pub url: Option<String>,
+    pub cookie_domain: Option<String>,
     pub browser: Option<Browser>,
     pub reminder_minutes: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]

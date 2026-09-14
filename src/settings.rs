@@ -13,7 +13,6 @@ use crate::{
 };
 
 pub const SETTINGS_PATH: &str = "settings.json";
-pub const DEFAULT_COOKIE_DOMAIN: &str = "hubs.hust.edu.cn";
 
 pub fn load_settings() -> Result<Settings> {
     let path = Path::new(SETTINGS_PATH);
@@ -46,10 +45,12 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
     };
     let class_times = match cli.class_times {
         Some(value) => value,
-        None => PathBuf::from(prompt_text(
-            "课程时间 JSON 文件路径",
-            settings.class_times.as_deref(),
-        )?),
+        None => PathBuf::from(
+            settings
+                .class_times
+                .clone()
+                .ok_or_else(|| anyhow!("课程时间 JSON 文件路径不能为空，且 settings.json 中也没有默认值。"))?,
+        ),
     };
     let url = match cli.url {
         Some(value) => value,
@@ -58,10 +59,10 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
             .clone()
             .ok_or_else(|| anyhow!("URL 不能为空，且 settings.json 中也没有默认值。"))?,
     };
-    let browser = match cli.browser {
-        Some(value) => value,
-        None => prompt_browser(settings.browser)?,
-    };
+    let cookie_domain = settings
+        .cookie_domain
+        .clone()
+        .ok_or_else(|| anyhow!("cookie_domain 不能为空，且 settings.json 中也没有默认值。"))?;
     let reminder_minutes = match cli.reminder_minutes {
         Some(value) => value,
         None => {
@@ -70,11 +71,15 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
             parsed.parse().context("提醒时间必须是有效的数字")?
         }
     };
+    let browser = match cli.browser {
+        Some(value) => value,
+        None => prompt_browser(settings.browser)?,
+    };
 
     settings.xqh = Some(xqh.clone());
     settings.output = Some(output.display().to_string());
-    settings.class_times = Some(class_times.display().to_string());
     settings.url = Some(url.clone());
+    settings.cookie_domain = Some(cookie_domain.clone());
     settings.browser = Some(browser);
     settings.reminder_minutes = Some(reminder_minutes);
 
@@ -85,7 +90,7 @@ pub fn resolve_options(cli: Cli, settings: &mut Settings) -> Result<ResolvedOpti
         input_json: cli.input_json,
         url,
         browser,
-        cookie_domain: DEFAULT_COOKIE_DOMAIN.to_string(),
+        cookie_domain,
         reminder_minutes,
         default_chrome_path: settings.chrome_path.as_ref().map(PathBuf::from),
         default_edge_path: settings.edge_path.as_ref().map(PathBuf::from),

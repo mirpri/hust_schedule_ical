@@ -1,8 +1,9 @@
 {
-  "xqh": "20252",
+  "xqh": "20261",
   "output": "schedule.ics",
   "class_times": "class-times.json",
   "url": "https://hubs.hust.edu.cn/schedule/getStudentScheduleByXqh",
+  "cookie_domain": "hubs.hust.edu.cn",
   "browser": "chrome",
   "reminder_minutes": 15
 }

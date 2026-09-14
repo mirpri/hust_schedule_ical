@@ -17,10 +17,14 @@ by Mirpri
 你可以从仓库的 [Release](https://github.com/mirpri/hust_schedule_ical/releases) 页面下载**适合你操作系统**的压缩文件。
 架构（aarch/x86）与操作系统（Windows/macOS/Linux）都要与电脑匹配。
 
-压缩文件包含了可执行文件和必须的 `.json` 配置文件。
+压缩文件包含了可执行文件和必须的 `.json` 配置文件。默认配置已经设置为 HUST 本科生 HUB 域名和作息时间表，本科生通常无需修改即可使用，教师需调整 url 和 cookie_domain，可能是:
 
-### Windows 用户建议
-直接双击运行 `hust_schedule_ical.exe` 即可。
+```
+  "url": "https://hubt.hust.edu.cn/schedule/getTeacherScheduleByXqh",
+  "cookie_domain": "hubt.hust.edu.cn",
+```
+
+Windows 用户直接双击运行 `hust_schedule_ical.exe` 即可运行。
 
 ## 使用步骤
 

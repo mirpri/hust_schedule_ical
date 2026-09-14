@@ -77,7 +77,7 @@ pub fn render_ics(events: &[CalendarEvent], timezone: &str, reminder_minutes: i3
     let mut out = String::new();
     out.push_str("BEGIN:VCALENDAR\r\n");
     out.push_str("VERSION:2.0\r\n");
-    out.push_str("PRODID:-//Codex//HUST Schedule iCal//EN\r\n");
+    out.push_str("PRODID:-//Mirpri//HUST Schedule iCal//EN\r\n");
     out.push_str("CALSCALE:GREGORIAN\r\n");
     out.push_str("METHOD:PUBLISH\r\n");
     out.push_str(&format!("X-WR-TIMEZONE:{}\r\n", escape_ics_text(timezone)));
